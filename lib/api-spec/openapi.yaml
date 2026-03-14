@@ -1,15 +1,20 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: California Housing Price Predictor API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: housing
+    description: Housing data endpoints
+  - name: starbucks
+    description: Starbucks location endpoints
+  - name: prediction
+    description: ML prediction endpoints
 paths:
   /healthz:
     get:
@@ -24,6 +29,147 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /housing/districts:
+    get:
+      operationId: getHousingDistricts
+      tags: [housing]
+      summary: Get all housing districts
+      description: Returns housing district data from 1990 California census
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+        - name: ocean_proximity
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of housing districts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HousingDistrict"
+
+  /housing/stats:
+    get:
+      operationId: getHousingStats
+      tags: [housing]
+      summary: Get housing statistics summary
+      description: Returns aggregated statistics about housing prices
+      responses:
+        "200":
+          description: Housing statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HousingStats"
+
+  /housing/predict:
+    post:
+      operationId: predictHousingPrice
+      tags: [prediction]
+      summary: Predict median house value
+      description: Uses trained linear regression model to predict housing price
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PredictionInput"
+      responses:
+        "200":
+          description: Prediction result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictionResult"
+
+  /housing/income-price:
+    get:
+      operationId: getIncomePriceData
+      tags: [housing]
+      summary: Get income vs price scatter data
+      description: Returns sampled data points for income vs median house value scatter plot
+      responses:
+        "200":
+          description: Income vs price data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IncomePricePoint"
+
+  /housing/price-by-region:
+    get:
+      operationId: getPriceByRegion
+      tags: [housing]
+      summary: Get median price grouped by ocean proximity
+      responses:
+        "200":
+          description: Price by region
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RegionPrice"
+
+  /housing/age-distribution:
+    get:
+      operationId: getAgeDistribution
+      tags: [housing]
+      summary: Get housing age distribution histogram
+      responses:
+        "200":
+          description: Age distribution
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgeDistributionBucket"
+
+  /starbucks/locations:
+    get:
+      operationId: getStarbucksLocations
+      tags: [starbucks]
+      summary: Get California Starbucks locations
+      responses:
+        "200":
+          description: List of Starbucks locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StarbucksLocation"
+
+  /starbucks/price-impact:
+    get:
+      operationId: getStarbucksPriceImpact
+      tags: [starbucks]
+      summary: Get housing price changes around Starbucks openings
+      description: Returns before/after price analysis for districts near Starbucks openings
+      responses:
+        "200":
+          description: Price impact data by year
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StarbucksPriceImpact"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +180,252 @@ components:
       required:
         - status
 
+    HousingDistrict:
+      type: object
+      properties:
+        id:
+          type: integer
+        longitude:
+          type: number
+        latitude:
+          type: number
+        housingMedianAge:
+          type: number
+        totalRooms:
+          type: number
+        totalBedrooms:
+          type: ["number", "null"]
+        population:
+          type: number
+        households:
+          type: number
+        medianIncome:
+          type: number
+        medianHouseValue:
+          type: number
+        oceanProximity:
+          type: string
+        roomsPerHousehold:
+          type: number
+        bedroomsPerRoom:
+          type: ["number", "null"]
+        populationPerHousehold:
+          type: number
+      required:
+        - id
+        - longitude
+        - latitude
+        - housingMedianAge
+        - totalRooms
+        - totalBedrooms
+        - population
+        - households
+        - medianIncome
+        - medianHouseValue
+        - oceanProximity
+        - roomsPerHousehold
+        - bedroomsPerRoom
+        - populationPerHousehold
+
+    HousingStats:
+      type: object
+      properties:
+        totalDistricts:
+          type: integer
+        avgMedianHouseValue:
+          type: number
+        medianMedianHouseValue:
+          type: number
+        avgMedianIncome:
+          type: number
+        avgHousingAge:
+          type: number
+        totalPopulation:
+          type: integer
+        minHouseValue:
+          type: number
+        maxHouseValue:
+          type: number
+        nearOceanCount:
+          type: integer
+        inlandCount:
+          type: integer
+        islandCount:
+          type: integer
+        nearBayCount:
+          type: integer
+        lessThanOneHourCount:
+          type: integer
+      required:
+        - totalDistricts
+        - avgMedianHouseValue
+        - medianMedianHouseValue
+        - avgMedianIncome
+        - avgHousingAge
+        - totalPopulation
+        - minHouseValue
+        - maxHouseValue
+        - nearOceanCount
+        - inlandCount
+        - islandCount
+        - nearBayCount
+        - lessThanOneHourCount
+
+    PredictionInput:
+      type: object
+      properties:
+        medianIncome:
+          type: number
+        housingMedianAge:
+          type: number
+        totalRooms:
+          type: number
+        totalBedrooms:
+          type: number
+        population:
+          type: number
+        households:
+          type: number
+        latitude:
+          type: number
+        longitude:
+          type: number
+        oceanProximity:
+          type: string
+      required:
+        - medianIncome
+        - housingMedianAge
+        - totalRooms
+        - totalBedrooms
+        - population
+        - households
+        - latitude
+        - longitude
+        - oceanProximity
+
+    PredictionResult:
+      type: object
+      properties:
+        predictedValue:
+          type: number
+        confidence:
+          type: number
+        featureImportance:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureImportance"
+        modelAccuracy:
+          type: number
+      required:
+        - predictedValue
+        - confidence
+        - featureImportance
+        - modelAccuracy
+
+    FeatureImportance:
+      type: object
+      properties:
+        feature:
+          type: string
+        importance:
+          type: number
+      required:
+        - feature
+        - importance
+
+    IncomePricePoint:
+      type: object
+      properties:
+        medianIncome:
+          type: number
+        medianHouseValue:
+          type: number
+        oceanProximity:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+      required:
+        - medianIncome
+        - medianHouseValue
+        - oceanProximity
+        - latitude
+        - longitude
+
+    RegionPrice:
+      type: object
+      properties:
+        oceanProximity:
+          type: string
+        avgPrice:
+          type: number
+        medianPrice:
+          type: number
+        count:
+          type: integer
+      required:
+        - oceanProximity
+        - avgPrice
+        - medianPrice
+        - count
+
+    AgeDistributionBucket:
+      type: object
+      properties:
+        ageRange:
+          type: string
+        count:
+          type: integer
+        avgPrice:
+          type: number
+      required:
+        - ageRange
+        - count
+        - avgPrice
+
+    StarbucksLocation:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        city:
+          type: string
+        openYear:
+          type: ["integer", "null"]
+      required:
+        - id
+        - name
+        - latitude
+        - longitude
+        - city
+        - openYear
+
+    StarbucksPriceImpact:
+      type: object
+      properties:
+        openYear:
+          type: integer
+        avgPriceNearby:
+          type: number
+        avgPriceOther:
+          type: number
+        percentDiff:
+          type: number
+        starbucksCount:
+          type: integer
+        label:
+          type: string
+      required:
+        - openYear
+        - avgPriceNearby
+        - avgPriceOther
+        - percentDiff
+        - starbucksCount
+        - label
