@@ -26,8 +26,8 @@ export function StarbucksImpactLine({ loading, data = [], isDark }: StarbucksImp
     <Card className="h-full flex flex-col">
       <CardHeader className="px-4 pt-4 pb-2 flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle className="text-base">Starbucks Price Impact</CardTitle>
-          <CardDescription className="text-xs mt-1">Districts within ~15km of a Starbucks opening showed higher prices</CardDescription>
+          <CardTitle className="text-base">Housing Prices Near Starbucks Locations</CardTitle>
+          <CardDescription className="text-xs mt-1">1990 census prices in districts where Starbucks later opened (1994–2003) vs. statewide average — shows Starbucks chose already-expensive areas</CardDescription>
         </div>
         {!loading && formattedData.length > 0 && (
           <CSVLink

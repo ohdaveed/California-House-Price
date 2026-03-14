@@ -60,7 +60,7 @@ export function CaliforniaMap({ loading, districts = [], starbucks = [], isDark 
               <span className="text-muted-foreground">Starbucks Opening</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-muted-foreground mr-1">Price:</span>
+              <span className="text-muted-foreground mr-1">Low</span>
               <div className="w-24 h-2 rounded overflow-hidden flex" style={{ background: "linear-gradient(to right, rgb(26,152,80), rgb(253,174,97), rgb(215,48,39))" }}></div>
               <span className="text-muted-foreground ml-1">High</span>
             </div>

@@ -168,12 +168,13 @@ export function PredictionForm({ isDark }: { isDark: boolean }) {
                 ${result.predictedValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </h3>
               <p className="text-sm text-muted-foreground mt-2">
-                Model Confidence: <span className="font-semibold text-foreground">{(result.confidence * 100).toFixed(1)}%</span>
+                Model R² Score: <span className="font-semibold text-foreground">{(result.modelAccuracy * 100).toFixed(1)}%</span>{" "}
+                <span className="text-xs">(variance explained)</span>
               </p>
             </div>
 
             <div className="mt-6">
-              <h4 className="text-sm font-semibold mb-4 text-center">Feature Importance</h4>
+              <h4 className="text-sm font-semibold mb-4 text-center">Feature Contributions (this prediction)</h4>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={result.featureImportance} layout="vertical" margin={{ left: 40, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke={gridColor} />

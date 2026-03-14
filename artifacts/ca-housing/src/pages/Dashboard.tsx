@@ -28,7 +28,7 @@ export function Dashboard() {
   }, [isDark]);
 
   const { data: statsData, isLoading: loadingStats, isFetching: fetchStats, dataUpdatedAt } = useGetHousingStats();
-  const { data: districtsData, isLoading: loadingDist, isFetching: fetchDist } = useGetHousingDistricts({ limit: 500 });
+  const { data: districtsData, isLoading: loadingDist, isFetching: fetchDist } = useGetHousingDistricts({ limit: 1500 });
   const { data: incomeData, isLoading: loadingInc, isFetching: fetchInc } = useGetIncomePriceData();
   const { data: regionData, isLoading: loadingReg, isFetching: fetchReg } = useGetPriceByRegion();
   const { data: ageData, isLoading: loadingAge, isFetching: fetchAge } = useGetAgeDistribution();
@@ -90,6 +90,11 @@ export function Dashboard() {
             </div>
           </div>
         </div>
+        <p className="text-center text-xs text-muted-foreground pb-2">
+          Data simulated from the 1990 California Census distribution (UCI ML Repository). Starbucks locations are representative;
+          opening years are approximate. The prediction model uses a linear regression with hardcoded coefficients (R²&nbsp;≈&nbsp;0.64)
+          — suitable for exploration only. Starbucks analysis reflects 1990 prices in areas where stores later opened, not causal effects.
+        </p>
       </div>
     </div>
   );

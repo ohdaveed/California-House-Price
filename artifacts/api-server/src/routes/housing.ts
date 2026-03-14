@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, housingDistrictsTable } from "@workspace/db";
-import { sql, eq, and, isNotNull } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import {
   GetHousingDistrictsResponse,
   GetHousingStatsResponse,
@@ -34,11 +34,9 @@ const MODEL = {
 };
 
 router.get("/housing/districts", async (req, res): Promise<void> => {
-  const limit = Math.min(Number(req.query.limit) || 500, 2000);
+  const limit = Math.min(Number(req.query.limit) || 1500, 2000);
   const offset = Number(req.query.offset) || 0;
   const oceanProximity = req.query.ocean_proximity as string | undefined;
-
-  let query = db.select().from(housingDistrictsTable);
 
   if (oceanProximity) {
     const rows = await db
@@ -51,12 +49,19 @@ router.get("/housing/districts", async (req, res): Promise<void> => {
     return;
   }
 
-  const rows = await db
-    .select()
-    .from(housingDistrictsTable)
-    .limit(limit)
-    .offset(offset);
-
+  // Sample evenly across the full dataset for good geographic coverage
+  const result = await db.execute(sql`
+    SELECT id, longitude, latitude, housing_median_age AS "housingMedianAge",
+      total_rooms AS "totalRooms", total_bedrooms AS "totalBedrooms",
+      population, households, median_income AS "medianIncome",
+      median_house_value AS "medianHouseValue", ocean_proximity AS "oceanProximity",
+      rooms_per_household AS "roomsPerHousehold", bedrooms_per_room AS "bedroomsPerRoom",
+      population_per_household AS "populationPerHousehold"
+    FROM housing_districts
+    TABLESAMPLE SYSTEM(${(limit / 20640) * 100})
+    LIMIT ${limit}
+  `);
+  const rows = Array.isArray(result) ? result : (result as { rows: unknown[] }).rows ?? [];
   res.json(GetHousingDistrictsResponse.parse(rows));
 });
 
@@ -113,20 +118,39 @@ router.post("/housing/predict", async (req, res): Promise<void> => {
 
   price = Math.max(14999, Math.min(500001, price));
 
+  // Compute per-input feature contributions (absolute dollar impact)
+  const incomeContrib = Math.abs(input.medianIncome * MODEL.coefficients.medianIncome);
+  const latContrib = Math.abs(input.latitude * MODEL.coefficients.latitude);
+  const lonContrib = Math.abs(input.longitude * MODEL.coefficients.longitude);
+  const locationContrib = latContrib + lonContrib;
+  const proximityContrib = Math.abs(
+    input.oceanProximity === "NEAR OCEAN" ? MODEL.coefficients.nearOcean
+    : input.oceanProximity === "NEAR BAY" ? MODEL.coefficients.nearBay
+    : input.oceanProximity === "<1H OCEAN" ? MODEL.coefficients.lessThanOneHour
+    : input.oceanProximity === "ISLAND" ? MODEL.coefficients.island
+    : 0
+  );
+  const ageContrib = Math.abs(input.housingMedianAge * MODEL.coefficients.housingMedianAge);
+  const roomsContrib = Math.abs(roomsPerHousehold * MODEL.coefficients.roomsPerHousehold);
+  const bedroomsContrib = Math.abs(bedroomsPerRoom * MODEL.coefficients.bedroomsPerRoom);
+  const popContrib = Math.abs(populationPerHousehold * MODEL.coefficients.populationPerHousehold);
+
+  const totalContrib = incomeContrib + locationContrib + proximityContrib + ageContrib + roomsContrib + bedroomsContrib + popContrib;
+
   const featureImportance = [
-    { feature: "Median Income", importance: 0.52 },
-    { feature: "Location (Lat/Lon)", importance: 0.18 },
-    { feature: "Ocean Proximity", importance: 0.12 },
-    { feature: "Housing Age", importance: 0.08 },
-    { feature: "Rooms per Household", importance: 0.06 },
-    { feature: "Bedrooms/Rooms Ratio", importance: 0.03 },
-    { feature: "Population Density", importance: 0.01 },
-  ];
+    { feature: "Median Income", importance: parseFloat((incomeContrib / totalContrib).toFixed(4)) },
+    { feature: "Location (Lat/Lon)", importance: parseFloat((locationContrib / totalContrib).toFixed(4)) },
+    { feature: "Ocean Proximity", importance: parseFloat((proximityContrib / totalContrib).toFixed(4)) },
+    { feature: "Housing Age", importance: parseFloat((ageContrib / totalContrib).toFixed(4)) },
+    { feature: "Rooms per Household", importance: parseFloat((roomsContrib / totalContrib).toFixed(4)) },
+    { feature: "Bedrooms/Rooms Ratio", importance: parseFloat((bedroomsContrib / totalContrib).toFixed(4)) },
+    { feature: "Population Density", importance: parseFloat((popContrib / totalContrib).toFixed(4)) },
+  ].sort((a, b) => b.importance - a.importance);
 
   res.json(
     PredictHousingPriceResponse.parse({
       predictedValue: Math.round(price),
-      confidence: 0.637,
+      confidence: MODEL.r2,
       featureImportance,
       modelAccuracy: MODEL.r2,
     })
@@ -134,18 +158,17 @@ router.post("/housing/predict", async (req, res): Promise<void> => {
 });
 
 router.get("/housing/income-price", async (_req, res): Promise<void> => {
-  const rows = await db
-    .select({
-      medianIncome: housingDistrictsTable.medianIncome,
-      medianHouseValue: housingDistrictsTable.medianHouseValue,
-      oceanProximity: housingDistrictsTable.oceanProximity,
-      latitude: housingDistrictsTable.latitude,
-      longitude: housingDistrictsTable.longitude,
-    })
-    .from(housingDistrictsTable)
-    .limit(2000)
-    .offset(Math.floor(Math.random() * 5000));
-
+  // Use TABLESAMPLE for consistent, geographically spread sample
+  const result = await db.execute(sql`
+    SELECT median_income AS "medianIncome",
+           median_house_value AS "medianHouseValue",
+           ocean_proximity AS "oceanProximity",
+           latitude, longitude
+    FROM housing_districts
+    TABLESAMPLE SYSTEM(10)
+    LIMIT 2000
+  `);
+  const rows = Array.isArray(result) ? result : (result as { rows: unknown[] }).rows ?? [];
   res.json(GetIncomePriceDataResponse.parse(rows));
 });
 
