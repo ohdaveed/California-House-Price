@@ -6,6 +6,7 @@ import { interpolateRdYlGn } from "d3-scale-chromatic";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { HousingDistrict, StarbucksLocation } from "@workspace/api-client-react";
+import { MapErrorBoundary } from "@/components/MapErrorBoundary";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -72,7 +73,8 @@ export function CaliforniaMap({ loading, districts = [], starbucks = [], isDark 
           <Skeleton className="w-full h-full rounded-md" />
         ) : (
           <div className="rounded-md overflow-hidden border border-border h-full z-0 relative isolate">
-            <MapContainer center={[37.0, -119.5]} zoom={6} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
+            <MapErrorBoundary>
+            <MapContainer key={tileUrl} center={[37.0, -119.5]} zoom={6} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false} zoomAnimation={false}>
               <TileLayer url={tileUrl} />
               {districts.map((d) => (
                 <CircleMarker
@@ -108,6 +110,7 @@ export function CaliforniaMap({ loading, districts = [], starbucks = [], isDark 
                 </Marker>
               ))}
             </MapContainer>
+            </MapErrorBoundary>
           </div>
         )}
       </CardContent>
