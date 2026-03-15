@@ -73,13 +73,19 @@ export function Dashboard() {
               />
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PriceByRegionBar loading={loadingReg || fetchReg} data={regionData} isDark={isDark} />
-              <AgeDistributionBar loading={loadingAge || fetchAge} data={ageData} isDark={isDark} />
+            <div className="flex items-center gap-3 pt-1">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">Data Insights</span>
+              <div className="flex-1 h-px bg-border" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ScatterChart loading={loadingInc || fetchInc} data={incomeData} isDark={isDark} />
+              <PriceByRegionBar loading={loadingReg || fetchReg} data={regionData} isDark={isDark} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <AgeDistributionBar loading={loadingAge || fetchAge} data={ageData} isDark={isDark} />
               <StarbucksImpactLine loading={loadingImpact || fetchImpact} data={sbuxImpact} isDark={isDark} />
             </div>
           </div>
