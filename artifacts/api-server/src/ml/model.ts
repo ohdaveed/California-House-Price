@@ -31,8 +31,12 @@ export type TrainedModel = {
     island: number;
   };
   r2: number;
+  trainR2: number;
+  testR2: number;
+  testMae: number;
   featureImportance: { feature: string; importance: number }[];
   trainedOn: number;
+  testedOn: number;
 };
 
 function buildRow(row: {
@@ -95,6 +99,48 @@ function solveNormalEquations(XtX: number[][], Xty: number[]): number[] {
   return beta;
 }
 
+function computeR2(rows: { x: number[]; y: number }[], beta: number[]): number {
+  const n = rows.length;
+  let sumY = 0;
+  let sumY2 = 0;
+  let SSres = 0;
+
+  for (const { x, y } of rows) {
+    sumY += y;
+    sumY2 += y * y;
+  }
+  const meanY = sumY / n;
+  const SStot = sumY2 - n * meanY * meanY;
+
+  for (const { x, y } of rows) {
+    const yHat = beta.reduce((acc, b, i) => acc + b * x[i], 0);
+    const err = y - yHat;
+    SSres += err * err;
+  }
+
+  return Math.max(0, 1 - SSres / SStot);
+}
+
+function computeMae(rows: { x: number[]; y: number }[], beta: number[]): number {
+  let sumAbs = 0;
+  for (const { x, y } of rows) {
+    const yHat = beta.reduce((acc, b, i) => acc + b * x[i], 0);
+    sumAbs += Math.abs(y - yHat);
+  }
+  return sumAbs / rows.length;
+}
+
+function shuffleWithSeed<T>(arr: T[], seed: number): T[] {
+  const out = [...arr];
+  let s = seed;
+  for (let i = out.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    const j = Math.abs(s) % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 let cachedModel: TrainedModel | null = null;
 
 export async function trainModel(): Promise<TrainedModel> {
@@ -122,8 +168,14 @@ export async function trainModel(): Promise<TrainedModel> {
     medianHouseValue: number;
   };
 
-  const rows = (Array.isArray(result) ? result : (result as { rows: unknown[] }).rows ?? []) as HousingRow[];
-  const n = rows.length;
+  const allRows = (Array.isArray(result) ? result : (result as { rows: unknown[] }).rows ?? []) as HousingRow[];
+
+  const shuffled = shuffleWithSeed(allRows, 42);
+  const splitIdx = Math.floor(shuffled.length * 0.8);
+  const trainRows = shuffled.slice(0, splitIdx);
+  const testRows = shuffled.slice(splitIdx);
+
+  const nTrain = trainRows.length;
   const p = 12;
 
   const XtX: number[][] = Array.from({ length: p }, () => new Array(p).fill(0));
@@ -131,11 +183,10 @@ export async function trainModel(): Promise<TrainedModel> {
 
   let sumY = 0;
   let sumY2 = 0;
-
   const featureSumSq: number[] = new Array(p).fill(0);
   const featureSum: number[] = new Array(p).fill(0);
 
-  for (const row of rows) {
+  for (const row of trainRows) {
     const x = buildRow(row);
     const y = row.medianHouseValue;
     sumY += y;
@@ -152,25 +203,19 @@ export async function trainModel(): Promise<TrainedModel> {
 
   const beta = solveNormalEquations(XtX, Xty);
 
-  const meanY = sumY / n;
-  const SStot = sumY2 - n * meanY * meanY;
+  const trainPairs = trainRows.map((row) => ({ x: buildRow(row), y: row.medianHouseValue }));
+  const testPairs = testRows.map((row) => ({ x: buildRow(row), y: row.medianHouseValue }));
 
-  let SSres = 0;
-  for (const row of rows) {
-    const x = buildRow(row);
-    const yHat = beta.reduce((acc, b, i) => acc + b * x[i], 0);
-    const err = row.medianHouseValue - yHat;
-    SSres += err * err;
-  }
+  const trainR2 = computeR2(trainPairs, beta);
+  const testR2 = computeR2(testPairs, beta);
+  const testMae = computeMae(testPairs, beta);
 
-  const r2 = Math.max(0, 1 - SSres / SStot);
-
+  const meanY = sumY / nTrain;
+  const stdY = Math.sqrt(sumY2 / nTrain - meanY * meanY);
   const featureStdDevs = featureSumSq.map((sq, i) => {
-    const mean = featureSum[i] / n;
-    return Math.sqrt(sq / n - mean * mean);
+    const mean = featureSum[i] / nTrain;
+    return Math.sqrt(sq / nTrain - mean * mean);
   });
-
-  const stdY = Math.sqrt(sumY2 / n - meanY * meanY);
 
   const rawImportances = beta.slice(1).map((coeff, i) => {
     const featureStd = featureStdDevs[i + 1];
@@ -184,6 +229,12 @@ export async function trainModel(): Promise<TrainedModel> {
       importance: parseFloat((imp / totalImportance).toFixed(4)),
     }))
     .sort((a, b) => b.importance - a.importance);
+
+  console.log(
+    `[ML] Trained on ${nTrain} rows, tested on ${testRows.length} rows. ` +
+    `Train R² = ${trainR2.toFixed(4)}, Test R² = ${testR2.toFixed(4)}, ` +
+    `Test MAE = $${Math.round(testMae).toLocaleString()}`
+  );
 
   cachedModel = {
     intercept: beta[0],
@@ -200,12 +251,15 @@ export async function trainModel(): Promise<TrainedModel> {
       lessThanOneHour: beta[10],
       island: beta[11],
     },
-    r2: parseFloat(r2.toFixed(4)),
+    r2: parseFloat(testR2.toFixed(4)),
+    trainR2: parseFloat(trainR2.toFixed(4)),
+    testR2: parseFloat(testR2.toFixed(4)),
+    testMae: Math.round(testMae),
     featureImportance,
-    trainedOn: n,
+    trainedOn: nTrain,
+    testedOn: testRows.length,
   };
 
-  console.log(`[ML] Linear regression trained on ${n} rows. R² = ${r2.toFixed(4)}`);
   return cachedModel;
 }
 
