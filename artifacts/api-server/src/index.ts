@@ -1,4 +1,5 @@
 import app from "./app";
+import { trainModel } from "./ml/model";
 
 const rawPort = process.env["PORT"];
 
@@ -16,4 +17,7 @@ if (Number.isNaN(port) || port <= 0) {
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+  trainModel().catch((err) => {
+    console.error("[ML] Model training failed:", err);
+  });
 });

@@ -10,28 +10,9 @@ import {
   GetPriceByRegionResponse,
   GetAgeDistributionResponse,
 } from "@workspace/api-zod";
+import { getModel } from "../ml/model";
 
 const router: IRouter = Router();
-
-// Linear regression model coefficients (pre-trained on the dataset)
-// These mimic what a real ML model would produce for the 1990 CA census data
-const MODEL = {
-  intercept: -300000,
-  coefficients: {
-    medianIncome: 42000,
-    housingMedianAge: 800,
-    roomsPerHousehold: 4000,
-    bedroomsPerRoom: -100000,
-    populationPerHousehold: -3000,
-    latitude: 1200,
-    longitude: -1500,
-    nearOcean: 30000,
-    nearBay: 45000,
-    lessThanOneHour: 15000,
-    island: 100000,
-  },
-  r2: 0.637,
-};
 
 router.get("/housing/districts", async (req, res): Promise<void> => {
   const limit = Math.min(Number(req.query.limit) || 1500, 2000);
@@ -97,43 +78,46 @@ router.post("/housing/predict", async (req, res): Promise<void> => {
     return;
   }
 
+  const model = await getModel();
+  const c = model.coefficients;
+
   const input = parsed.data;
-  const roomsPerHousehold = input.totalRooms / input.households;
-  const bedroomsPerRoom = input.totalBedrooms / input.totalRooms;
-  const populationPerHousehold = input.population / input.households;
+  const roomsPerHousehold = input.households > 0 ? input.totalRooms / input.households : 0;
+  const bedroomsPerRoom = input.totalRooms > 0 ? input.totalBedrooms / input.totalRooms : 0;
+  const populationPerHousehold = input.households > 0 ? input.population / input.households : 0;
 
-  let price = MODEL.intercept;
-  price += input.medianIncome * MODEL.coefficients.medianIncome;
-  price += input.housingMedianAge * MODEL.coefficients.housingMedianAge;
-  price += roomsPerHousehold * MODEL.coefficients.roomsPerHousehold;
-  price += bedroomsPerRoom * MODEL.coefficients.bedroomsPerRoom;
-  price += populationPerHousehold * MODEL.coefficients.populationPerHousehold;
-  price += input.latitude * MODEL.coefficients.latitude;
-  price += input.longitude * MODEL.coefficients.longitude;
+  let price = model.intercept;
+  price += input.medianIncome * c.medianIncome;
+  price += input.housingMedianAge * c.housingMedianAge;
+  price += roomsPerHousehold * c.roomsPerHousehold;
+  price += bedroomsPerRoom * c.bedroomsPerRoom;
+  price += populationPerHousehold * c.populationPerHousehold;
+  price += input.latitude * c.latitude;
+  price += input.longitude * c.longitude;
 
-  if (input.oceanProximity === "NEAR OCEAN") price += MODEL.coefficients.nearOcean;
-  else if (input.oceanProximity === "NEAR BAY") price += MODEL.coefficients.nearBay;
-  else if (input.oceanProximity === "<1H OCEAN") price += MODEL.coefficients.lessThanOneHour;
-  else if (input.oceanProximity === "ISLAND") price += MODEL.coefficients.island;
+  if (input.oceanProximity === "NEAR OCEAN") price += c.nearOcean;
+  else if (input.oceanProximity === "NEAR BAY") price += c.nearBay;
+  else if (input.oceanProximity === "<1H OCEAN") price += c.lessThanOneHour;
+  else if (input.oceanProximity === "ISLAND") price += c.island;
 
   price = Math.max(14999, Math.min(500001, price));
 
   // Compute per-input feature contributions (absolute dollar impact)
-  const incomeContrib = Math.abs(input.medianIncome * MODEL.coefficients.medianIncome);
-  const latContrib = Math.abs(input.latitude * MODEL.coefficients.latitude);
-  const lonContrib = Math.abs(input.longitude * MODEL.coefficients.longitude);
+  const incomeContrib = Math.abs(input.medianIncome * c.medianIncome);
+  const latContrib = Math.abs(input.latitude * c.latitude);
+  const lonContrib = Math.abs(input.longitude * c.longitude);
   const locationContrib = latContrib + lonContrib;
   const proximityContrib = Math.abs(
-    input.oceanProximity === "NEAR OCEAN" ? MODEL.coefficients.nearOcean
-    : input.oceanProximity === "NEAR BAY" ? MODEL.coefficients.nearBay
-    : input.oceanProximity === "<1H OCEAN" ? MODEL.coefficients.lessThanOneHour
-    : input.oceanProximity === "ISLAND" ? MODEL.coefficients.island
+    input.oceanProximity === "NEAR OCEAN" ? c.nearOcean
+    : input.oceanProximity === "NEAR BAY" ? c.nearBay
+    : input.oceanProximity === "<1H OCEAN" ? c.lessThanOneHour
+    : input.oceanProximity === "ISLAND" ? c.island
     : 0
   );
-  const ageContrib = Math.abs(input.housingMedianAge * MODEL.coefficients.housingMedianAge);
-  const roomsContrib = Math.abs(roomsPerHousehold * MODEL.coefficients.roomsPerHousehold);
-  const bedroomsContrib = Math.abs(bedroomsPerRoom * MODEL.coefficients.bedroomsPerRoom);
-  const popContrib = Math.abs(populationPerHousehold * MODEL.coefficients.populationPerHousehold);
+  const ageContrib = Math.abs(input.housingMedianAge * c.housingMedianAge);
+  const roomsContrib = Math.abs(roomsPerHousehold * c.roomsPerHousehold);
+  const bedroomsContrib = Math.abs(bedroomsPerRoom * c.bedroomsPerRoom);
+  const popContrib = Math.abs(populationPerHousehold * c.populationPerHousehold);
 
   const totalContrib = incomeContrib + locationContrib + proximityContrib + ageContrib + roomsContrib + bedroomsContrib + popContrib;
 
@@ -150,9 +134,9 @@ router.post("/housing/predict", async (req, res): Promise<void> => {
   res.json(
     PredictHousingPriceResponse.parse({
       predictedValue: Math.round(price),
-      confidence: MODEL.r2,
+      confidence: model.r2,
       featureImportance,
-      modelAccuracy: MODEL.r2,
+      modelAccuracy: model.r2,
     })
   );
 });
